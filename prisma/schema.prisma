@@ -1,0 +1,271 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CampaignStatus {
+  DRAFT
+  PROCESSING
+  READY
+  PAUSED
+  COMPLETED
+  FAILED
+}
+
+enum ContactStatus {
+  IMPORTED
+  RESEARCHING
+  RESEARCHED
+  GENERATING
+  GENERATED
+  APPROVED
+  DRAFTED
+  SENT
+  MANUAL_REVIEW
+  SKIPPED
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum DeliveryStatus {
+  PENDING
+  CREATED
+  SENT
+  FAILED
+}
+
+model UserProfile {
+  id                    String   @id @default(cuid())
+  name                  String
+  email                 String   @unique
+  phone                 String?
+  linkedin              String?
+  github                String?
+  location              String?
+  education             String?
+  targetRoles           Json
+  skills                Json
+  experienceSummary     String   @db.Text
+  askLumenDescription   String   @db.Text
+  viksitHubDescription  String   @db.Text
+  xerxezDescription     String   @db.Text
+  defaultSignature      String   @db.Text
+  defaultResumeStrategy String   @default("category")
+  dailySendLimit        Int      @default(20)
+  sendDelaySeconds      Int      @default(30)
+  draftOnlyMode         Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model ApiKey {
+  id           String   @id @default(cuid())
+  provider     String   @unique
+  encryptedKey String   @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model OAuthCredential {
+  id               String   @id @default(cuid())
+  provider         String   @unique
+  encryptedTokens  String   @db.Text
+  accountEmail     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ResumeTemplate {
+  id            String   @id @default(cuid())
+  name          String
+  type          String
+  originalLatex String   @db.Text
+  currentLatex  String   @db.Text
+  originalPdfUrl String?
+  pdfUrl        String?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  resumes       GeneratedResume[]
+}
+
+model Campaign {
+  id              String         @id @default(cuid())
+  name            String
+  uploadedFileUrl String?
+  uploadedFileName String?
+  status          CampaignStatus @default(DRAFT)
+  totalRows       Int            @default(0)
+  notes           String?        @db.Text
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  contacts        Contact[]
+  logs            ActivityLog[]
+}
+
+model Contact {
+  id                  String        @id @default(cuid())
+  campaignId          String
+  campaign            Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  researchId          String?
+  research            CompanyResearch? @relation(fields: [researchId], references: [id])
+  hrName              String?
+  hrEmail             String
+  companyName         String
+  originalCompanyName String
+  companyWebsite      String?
+  linkedinUrl         String?
+  notes               String?       @db.Text
+  emailValid          Boolean
+  status              ContactStatus @default(IMPORTED)
+  priorityScore       Int           @default(0)
+  hiringLikelihood    String        @default("Very Low")
+  manualReviewResolved Boolean      @default(false)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  generatedResumes    GeneratedResume[]
+  generatedEmails     GeneratedEmail[]
+  gmailDrafts         GmailDraft[]
+  sentEmails          SentEmail[]
+  logs                ActivityLog[]
+  jobs                BackgroundJob[]
+  @@index([campaignId, status])
+  @@index([companyName])
+}
+
+model CompanyResearch {
+  id                     String   @id @default(cuid())
+  companyName            String
+  normalizedCompanyName  String
+  officialWebsite        String?
+  linkedinUrl            String?
+  industry               String?
+  companyType            String?
+  category               String
+  productsServices       String   @db.Text
+  techFocus               String   @db.Text
+  companyBackground       String   @db.Text
+  whyRelevantToOm         String   @db.Text
+  possibleRoles           Json
+  recommendedResumeAngle String   @db.Text
+  personalizationPoints  Json
+  confidenceScore        Int
+  manualReviewRequired   Boolean
+  sources                 Json
+  hiringSignals           Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  contacts                Contact[]
+  @@index([normalizedCompanyName])
+}
+
+model GeneratedResume {
+  id            String   @id @default(cuid())
+  contactId     String
+  contact       Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  templateId    String?
+  template      ResumeTemplate? @relation(fields: [templateId], references: [id])
+  companyName   String
+  resumeType    String
+  latexContent  String   @db.Text
+  htmlContent   String?  @db.Text
+  texFileUrl    String?
+  pdfFileUrl    String?
+  fileName      String
+  compileStatus JobStatus @default(PENDING)
+  errorMessage  String?  @db.Text
+  contentHash   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([contactId, createdAt])
+}
+
+model GeneratedEmail {
+  id                   String   @id @default(cuid())
+  contactId            String
+  contact              Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  subject              String
+  body                 String   @db.Text
+  followUpBody         String   @db.Text
+  personalizationLine  String   @db.Text
+  targetRole           String
+  confidenceScore      Int
+  manualReviewRequired Boolean
+  approved             Boolean  @default(false)
+  approvedAt           DateTime?
+  editedByUser         Boolean  @default(false)
+  qualityCheck         Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  gmailDrafts          GmailDraft[]
+  sentEmails           SentEmail[]
+  @@index([contactId, createdAt])
+}
+
+model GmailDraft {
+  id               String         @id @default(cuid())
+  contactId        String
+  contact          Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  generatedEmailId String
+  generatedEmail   GeneratedEmail @relation(fields: [generatedEmailId], references: [id], onDelete: Cascade)
+  gmailDraftId     String?
+  status           DeliveryStatus @default(PENDING)
+  errorMessage     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model SentEmail {
+  id               String         @id @default(cuid())
+  contactId        String
+  contact          Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  generatedEmailId String
+  generatedEmail   GeneratedEmail @relation(fields: [generatedEmailId], references: [id], onDelete: Cascade)
+  gmailMessageId   String?
+  sentAt           DateTime?
+  status           DeliveryStatus @default(PENDING)
+  errorMessage     String?        @db.Text
+  createdAt        DateTime       @default(now())
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  action      String
+  entityType  String
+  entityId    String?
+  campaignId  String?
+  campaign    Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  companyName String?
+  hrEmail     String?
+  status      String
+  message     String   @db.Text
+  userAction  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  @@index([createdAt])
+}
+
+model BackgroundJob {
+  id          String    @id @default(cuid())
+  type        String
+  contactId   String?
+  contact     Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status      JobStatus @default(PENDING)
+  attempts    Int       @default(0)
+  payload     Json
+  errorMessage String?  @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  @@index([status, createdAt])
+}

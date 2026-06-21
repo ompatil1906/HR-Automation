@@ -1,0 +1,3 @@
+import { NextResponse } from "next/server";
+import { createSession } from "@/lib/auth";
+export async function POST(request: Request) { const { password } = await request.json(); const expected = process.env.COLDMAILOS_ADMIN_PASSWORD; if (!expected) return NextResponse.json({ error: "COLDMAILOS_ADMIN_PASSWORD is not configured" }, { status: 503 }); if (password !== expected) return NextResponse.json({ error: "Incorrect password" }, { status: 401 }); const response = NextResponse.json({ success: true }); response.cookies.set("coldmailos_session", await createSession(), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 604800, path: "/" }); return response; }
