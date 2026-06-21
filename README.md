@@ -171,6 +171,8 @@ Tests cover spreadsheet mapping, email validation, company normalization, Tavily
 5. Run `npx prisma migrate deploy` against production once.
 6. Deploy. The build command is `npm run build`.
 
+The repository includes `vercel.json` declaring the Next.js framework and `.next` output. In **Vercel → Project Settings → Build & Development Settings**, do not override the Output Directory with `public`; leave the repository setting in control or set it to `.next`.
+
 ## Troubleshooting
 
 - **Unauthorized:** set `COLDMAILOS_ADMIN_PASSWORD` and sign in again; rotate `NEXTAUTH_SECRET` only when intentionally invalidating sessions.
