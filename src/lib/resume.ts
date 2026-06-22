@@ -6,6 +6,7 @@ import { renderResumePdf } from "@/lib/resume-renderer";
 import { resumeFileName, sanitizeCompanyForFilename } from "@/lib/utils";
 import { storeFile } from "@/lib/storage";
 import { certificationSchema, educationEntrySchema, experienceSchema, projectSchema } from "@/lib/profile-schema";
+import { assertPdfBuffer } from "@/lib/pdf";
 
 const baseLatex = String.raw`\documentclass[10pt,a4paper]{article}
 \usepackage[margin=0.65in]{geometry}\usepackage{enumitem}\usepackage[hidelinks]{hyperref}
@@ -57,6 +58,7 @@ export async function generateResume(contactId: string) {
       certifications: certifications.success ? certifications.data : [],
       achievements,
     });
+    assertPdfBuffer(pdf);
     const key = sanitizeCompanyForFilename(contact.companyName);
     const [pdfUrl, texUrl] = await Promise.all([
       storeFile(`resumes/pdf/${fileName}`, pdf, "application/pdf"),

@@ -1,8 +1,46 @@
 "use client";
+
 import { useState } from "react";
-import Link from "next/link";
-import { ArrowRight, Check, FileText, Search, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Search, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { Button, Card, PageHeader, Spinner } from "@/components/ui";
 
-const initial={hrEmail:"",hrName:"",companyName:"",companyWebsite:"",linkedinUrl:"",targetRole:"",extraNote:""};
-export default function SinglePage(){const[form,setForm]=useState(initial);const[step,setStep]=useState(0);const[result,setResult]=useState<any>();const[busy,setBusy]=useState(false);const[error,setError]=useState("");const set=(k:string,v:string)=>setForm(f=>({...f,[k]:v}));async function call(url:string,body:any){setBusy(true);setError("");try{const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error);return d}catch(e){setError(e instanceof Error?e.message:"Action failed");throw e}finally{setBusy(false)}}async function research(){try{const d=await call("/api/single/research",form);setResult(d);setStep(1)}catch{}}async function generate(){try{const d=await call("/api/single/generate",{contactId:result.contactId});setResult({...result,...d});setStep(2)}catch{}}return <><PageHeader title="Single company outreach" description="The same researched, reviewed workflow—without needing a spreadsheet."/><div className="mb-6 flex items-center gap-3 text-sm">{["Contact details","Verified research","Résumé & email","Approval & Gmail"].map((s,i)=><div key={s} className={`flex items-center gap-2 ${step>=i?"text-violet-700":"text-gray-400"}`}><span className={`grid size-7 place-items-center rounded-full text-xs font-bold ${step>=i?"bg-violet-100":"bg-gray-100"}`}>{step>i?<Check size={14}/>:i+1}</span><span className="hidden sm:inline">{s}</span>{i<3&&<ArrowRight size={14}/>}</div>)}</div><div className="grid gap-6 xl:grid-cols-[1fr_390px]"><Card className="p-6"><h2 className="font-bold">HR and company details</h2><div className="mt-5 grid gap-4 sm:grid-cols-2">{[["HR email *","hrEmail","email"],["HR name","hrName","text"],["Company name *","companyName","text"],["Company website","companyWebsite","url"],["LinkedIn URL","linkedinUrl","url"],["Target role","targetRole","text"]].map(([label,key,type])=><div key={key}><label className="label">{label}</label><input type={type} disabled={step>0} className="input disabled:bg-gray-50" value={(form as any)[key]} onChange={e=>set(key,e.target.value)}/></div>)}</div><div className="mt-4"><label className="label">Extra personalization note</label><textarea disabled={step>0} className="input min-h-24 disabled:bg-gray-50" value={form.extraNote} onChange={e=>set("extraNote",e.target.value)}/></div><div className="mt-6 flex flex-wrap gap-3">{step===0&&<Button onClick={research} disabled={busy||!form.hrEmail||!form.companyName}>{busy?<Spinner/>:<Search size={16}/>} Research company</Button>}{step===1&&<Button onClick={generate} disabled={busy}>{busy?<Spinner/>:<Sparkles size={16}/>} Generate résumé & email</Button>}{step>=2&&<Link href={`/campaigns/${result.campaignId}`} className="btn btn-primary">Open review & approval <ArrowRight size={16}/></Link>}</div>{error&&<p className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}</Card><aside className="space-y-5"><Card className="p-5"><h2 className="font-bold">Pipeline status</h2><div className="mt-4 space-y-3">{[["Company research",step>=1],["Company-specific PDF",step>=2],["Personalized email",step>=2],["Manual approval",false],["Gmail draft",false]].map(([label,done])=><div key={String(label)} className="flex items-center gap-3 text-sm"><span className={`grid size-7 place-items-center rounded-full ${done?"bg-green-100 text-green-700":"bg-gray-100 text-gray-400"}`}>{done?<Check size={15}/>:"·"}</span>{label}</div>)}</div></Card>{result?.research&&<Card className="p-5"><div className="flex items-center justify-between"><h2 className="font-bold">Research snapshot</h2><span className="text-sm font-bold text-violet-700">{result.research.confidenceScore}%</span></div><p className="mt-3 text-sm font-semibold">{result.research.category}</p><p className="mt-2 line-clamp-5 text-sm leading-6 text-gray-500">{result.research.companyBackground}</p></Card>}{result?.resume&&<Card className="p-5"><h2 className="flex items-center gap-2 font-bold"><FileText size={17}/> Generated package</h2><a className="mt-3 block truncate text-sm text-blue-600" href={result.resume.pdfFileUrl}>{result.resume.fileName}</a><p className="mt-3 text-sm text-gray-500">{result.email.subject}</p></Card>}</aside></div></>}
+const initial = { hrEmail: "", hrName: "", companyName: "", companyWebsite: "", linkedinUrl: "", targetRole: "", extraNote: "" };
+
+export default function SinglePage() {
+  const [form, setForm] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const router = useRouter();
+  const set = (key: string, value: string) => setForm(current => ({ ...current, [key]: value }));
+
+  async function start() {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/single/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not start automation");
+      router.push(`/campaigns/${data.campaignId}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not start automation");
+      setBusy(false);
+    }
+  }
+
+  return <>
+    <PageHeader title="Single company outreach" description="Enter the contact once; research, resume generation, and email generation continue automatically." />
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <Card className="p-5 sm:p-6">
+        <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-violet-50 text-violet-700"><Search size={19} /></span><div><h2 className="font-bold">Contact and company</h2><p className="text-xs text-gray-500">Required information is validated before the job is queued.</p></div></div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">{[["HR email *","hrEmail","email"],["HR name","hrName","text"],["Company name *","companyName","text"],["Company website","companyWebsite","url"],["LinkedIn URL","linkedinUrl","url"],["Target role","targetRole","text"]].map(([label,key,type]) => <div key={key}><label className="label">{label}</label><input type={type} className="input" value={(form as any)[key]} onChange={event => set(key,event.target.value)} /></div>)}</div>
+        <div className="mt-4"><label className="label">Extra personalization note</label><textarea className="input min-h-24" value={form.extraNote} onChange={event => set("extraNote",event.target.value)} /></div>
+        {error && <p className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+        <Button className="mt-6 w-full sm:w-auto" onClick={start} disabled={busy || !form.hrEmail || !form.companyName}>{busy ? <Spinner /> : <Zap size={16} />} Start automatic pipeline</Button>
+      </Card>
+      <aside className="space-y-5">
+        <Card className="p-5"><h2 className="flex items-center gap-2 font-bold"><Sparkles size={17} /> Automatic workflow</h2><div className="mt-4 space-y-3">{["Verified company research","Company-matched PDF resume","Personalized email and quality check","Manual review before delivery","Gmail draft after approval"].map((label,index) => <div key={label} className="flex items-center gap-3 text-sm"><span className={`grid size-7 place-items-center rounded-full ${index < 3 ? "bg-violet-100 text-violet-700" : "bg-gray-100 text-gray-500"}`}>{index < 3 ? <Check size={14} /> : index + 1}</span>{label}</div>)}</div></Card>
+        <Card className="border-emerald-200 bg-emerald-50 p-5"><h2 className="flex items-center gap-2 font-bold text-emerald-900"><ShieldCheck size={17} /> Sending stays manual</h2><p className="mt-2 text-sm leading-6 text-emerald-800">Automation stops at review. Approval creates an individual Gmail draft; sending still requires explicit confirmation.</p></Card>
+      </aside>
+    </div>
+  </>;
+}

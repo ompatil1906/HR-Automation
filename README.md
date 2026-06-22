@@ -10,6 +10,7 @@ ColdMailOS is a private, full-stack cold outreach workspace for Om Patil. It imp
 - Immutable original LaTeX résumé plus editable working templates and company-specific `.tex`/PDF artifacts
 - Personalized email and follow-up generation with edit/approve workflow
 - Gmail OAuth, encrypted refresh tokens, per-contact MIME attachments, labels, drafts, and sends
+- Automatic per-contact background pipeline for research, résumé generation, email generation, and quality checks
 - Draft-only mode, daily limit, inter-send delay, typed confirmation, per-row validation, and high-error-rate circuit breaker
 - Single-company mode and Excel, CSV, ZIP, and log exports
 
@@ -114,11 +115,14 @@ Gemini is also used for conservative LaTeX tailoring and concise email generatio
 
 OAuth tokens are encrypted before database storage. The app requests Gmail compose and label scopes, not full mailbox access.
 
+ColdMailOS sends from the connected Gmail account and requires it to match the profile sender address. Messages are plain text, individually addressed, rate-limited to at least 30 seconds apart, and checked for excessive links, spam-like phrases, duplicate sends, and invalid attachments. Recipient-controlled “External” labels cannot be removed by the sender.
+
 ## Using campaigns
 
 1. Go to `/upload`, choose `.xlsx`, `.xls`, or `.csv`, and click **Detect columns**.
 2. Verify HR name, HR email, company, website, LinkedIn, and notes mappings.
-3. Create the campaign and open its approval table.
+3. Create the campaign. ColdMailOS automatically queues research, a matched PDF résumé, a personalized email, and deterministic quality checks for each valid contact.
+4. Review generated emails. Approval creates the individual Gmail draft automatically; sending still requires explicit typed confirmation.
 4. Select rows and run research, résumé generation, and email generation.
 5. Open **Review email**, edit if needed, and click **Save & approve**. This can explicitly resolve a manual-review warning.
 6. Use **Create Drafts** for safe Gmail drafts, or disable draft-only mode and use the guarded send action.
