@@ -77,14 +77,13 @@ export async function compileLatexToPdf(latex: string): Promise<Buffer> {
   formData.append("engine", "pdflatex");
   formData.append("return", "pdf");
 
-  const res = await fetch("https://texlive.net/cgi-bin/latexcgi", {
+  const response = await fetch("https://texlive.net/cgi-bin/latexcgi", {
     method: "POST",
     body: formData,
+    signal: AbortSignal.timeout(25_000),
   });
-
-  if (!res.ok) {
-    throw new Error(`LaTeX compilation failed: ${res.status} ${res.statusText}`);
-  }
-
-  return Buffer.from(await res.arrayBuffer());
+  if (!response.ok) throw new Error(`LaTeX compilation failed: ${response.status} ${response.statusText}`);
+  const pdf = Buffer.from(await response.arrayBuffer());
+  if (pdf.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error("LaTeX compiler returned an invalid PDF");
+  return pdf;
 }

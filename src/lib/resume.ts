@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { getOrCreateProfile } from "@/lib/profile";
 import { generateGeminiText } from "@/lib/gemini";
 import { resumeTailoringPrompt } from "@/prompts/resumeTailoringPrompt";
-import { compileLatexToPdf } from "@/lib/resume-renderer";
+import { compileLatexToPdf, renderResumePdf } from "@/lib/resume-renderer";
 import { resumeFileName, sanitizeCompanyForFilename } from "@/lib/utils";
 import { storeFile } from "@/lib/storage";
 import { certificationSchema, educationEntrySchema, experienceSchema, projectSchema } from "@/lib/profile-schema";
@@ -44,7 +44,7 @@ export async function generateResume(contactId: string) {
       { title: "Full-Stack Engineer Intern — ViksitHub", detail: profile.viksitHubDescription },
       { title: "Intern — XerXez Solutions", detail: profile.xerxezDescription },
     ];
-    const generatedPdf = await renderResumePdf({
+    const fallbackPdf = await renderResumePdf({
       name: profile.name, email: profile.email, phone: profile.phone, linkedin: profile.linkedin, github: profile.github,
       portfolio: profile.portfolio, location: profile.location, education: profile.education, targetRole: role, skills: prioritized,
       summary: profile.professionalSummary || profile.experienceSummary,
@@ -58,11 +58,18 @@ export async function generateResume(contactId: string) {
       certifications: certifications.success ? certifications.data : [],
       achievements,
     });
-    assertPdfBuffer(pdf);
-    const pdf = await compileLatexToPdf(latex);
+    assertPdfBuffer(fallbackPdf);
+    let generatedPdf: Uint8Array = fallbackPdf;
+    try {
+      const compiledPdf = await compileLatexToPdf(latex);
+      assertPdfBuffer(compiledPdf);
+      generatedPdf = compiledPdf;
+    } catch {
+      // Keep the valid serverless PDF when hosted LaTeX compilation is unavailable.
+    }
     const key = sanitizeCompanyForFilename(contact.companyName);
     const [pdfUrl, texUrl] = await Promise.all([
-      storeFile(`resumes/pdf/${fileName}`, generatedPdf, "application/pdf"),
+      storeFile(`resumes/pdf/${fileName}`, Buffer.from(generatedPdf), "application/pdf"),
       storeFile(`resumes/tex/Om_Patil_Resume_${key}.tex`, Buffer.from(latex), "application/x-tex"),
     ]);
     const updated = await db.generatedResume.update({ where: { id: resume.id }, data: { latexContent: latex, pdfFileUrl: pdfUrl, texFileUrl: texUrl, compileStatus: "COMPLETED" } });
