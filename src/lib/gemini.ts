@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
 
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+
 async function apiKey() {
   const stored = await db.apiKey.findUnique({ where: { provider: "gemini" } });
   if (stored) return decryptSecret(stored.encryptedKey);
@@ -11,14 +13,14 @@ async function apiKey() {
 
 export async function generateGeminiJson<T>(prompt: string): Promise<T> {
   const client = new GoogleGenerativeAI(await apiKey());
-  const model = client.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { responseMimeType: "application/json", temperature: 0.2 } });
+  const model = client.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: { responseMimeType: "application/json", temperature: 0.2 } });
   const response = await model.generateContent(prompt);
   return parseGeminiJson<T>(response.response.text());
 }
 
 export async function generateGeminiText(prompt: string) {
   const client = new GoogleGenerativeAI(await apiKey());
-  const model = client.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { temperature: 0.2 } });
+  const model = client.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: { temperature: 0.2 } });
   const response = await model.generateContent(prompt);
   return response.response.text().replace(/^```(?:latex|tex)?\s*/i, "").replace(/```\s*$/, "").trim();
 }
