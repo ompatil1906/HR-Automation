@@ -1,7 +1,8 @@
 export type ProviderFailure = {
-  code: "GEMINI_SPEND_CAP" | "GEMINI_RATE_LIMIT" | "PROVIDER_ERROR";
+  code: "GEMINI_SPEND_CAP" | "GEMINI_RATE_LIMIT" | "GEMINI_HIGH_DEMAND" | "PROVIDER_ERROR";
   message: string;
   configurationBlocked: boolean;
+  retryable: boolean;
 };
 
 export function classifyProviderError(error: unknown): ProviderFailure {
@@ -10,11 +11,19 @@ export function classifyProviderError(error: unknown): ProviderFailure {
     code: "GEMINI_SPEND_CAP",
     message: "Gemini monthly spending cap exceeded. Increase the project cap in Google AI Studio or replace the Gemini API key in Settings, then retry automation.",
     configurationBlocked: true,
+    retryable: false,
+  };
+  if (/503|service unavailable|high demand|temporar(?:y|ily) unavailable/i.test(raw)) return {
+    code: "GEMINI_HIGH_DEMAND",
+    message: "Gemini is temporarily experiencing high demand. ColdMailOS retried automatically; retry the pending contacts in a few minutes if capacity remains unavailable.",
+    configurationBlocked: false,
+    retryable: true,
   };
   if (/429|too many requests|quota exceeded|resource_exhausted/i.test(raw)) return {
     code: "GEMINI_RATE_LIMIT",
-    message: "Gemini quota is temporarily unavailable. Wait for quota reset or replace the Gemini API key, then retry automation.",
-    configurationBlocked: true,
+    message: "Gemini rate limit is temporarily unavailable. ColdMailOS retried automatically; retry pending contacts after the quota window resets.",
+    configurationBlocked: false,
+    retryable: true,
   };
-  return { code: "PROVIDER_ERROR", message: raw, configurationBlocked: false };
+  return { code: "PROVIDER_ERROR", message: raw, configurationBlocked: false, retryable: false };
 }

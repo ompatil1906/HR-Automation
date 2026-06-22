@@ -48,8 +48,8 @@ export async function researchContact(contactId: string) {
     return research;
   } catch (error) {
     const failure = classifyProviderError(error);
-    await db.contact.update({ where: { id: contactId }, data: { status: failure.configurationBlocked ? "MANUAL_REVIEW" : "FAILED" } });
-    await log(contactId, contact.campaignId, "COMPANY_RESEARCHED", failure.configurationBlocked ? "CONFIGURATION_BLOCKED" : "FAILED", failure.message);
+    await db.contact.update({ where: { id: contactId }, data: { status: failure.retryable ? "IMPORTED" : failure.configurationBlocked ? "MANUAL_REVIEW" : "FAILED" } });
+    await log(contactId, contact.campaignId, "COMPANY_RESEARCHED", failure.retryable ? "PROVIDER_BUSY" : failure.configurationBlocked ? "CONFIGURATION_BLOCKED" : "FAILED", failure.message);
     throw error;
   }
 }

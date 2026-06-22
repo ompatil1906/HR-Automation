@@ -70,8 +70,11 @@ export async function processAutomationJob(jobId: string) {
   } catch (error) {
     const failure = classifyProviderError(error);
     await db.backgroundJob.update({ where: { id: jobId }, data: { status: "FAILED", errorMessage: failure.message, payload: { ...(job.payload as object), failureCode: failure.code } } });
-    const contact = job.contactId ? await db.contact.findUnique({ where: { id: job.contactId }, select: { campaignId: true, status: true } }) : null;
-    if (job.contactId && contact) await db.contact.update({ where: { id: job.contactId }, data: { status: failure.configurationBlocked ? "MANUAL_REVIEW" : "FAILED" } });
+    const contact = job.contactId ? await db.contact.findUnique({ where: { id: job.contactId }, select: { campaignId: true, status: true, researchId: true } }) : null;
+    if (job.contactId && contact) {
+      const recoveredStatus = failure.retryable ? (contact.researchId ? "RESEARCHED" : "IMPORTED") : failure.configurationBlocked ? "MANUAL_REVIEW" : "FAILED";
+      await db.contact.update({ where: { id: job.contactId }, data: { status: recoveredStatus } });
+    }
     if (contact && failure.configurationBlocked) await db.campaign.update({ where: { id: contact.campaignId }, data: { status: "PAUSED" } });
     else if (contact) await finishCampaignIfIdle(contact.campaignId);
     throw error;
@@ -91,12 +94,17 @@ export async function processAutomationJobs(jobIds: string[]) {
 }
 
 export async function automationStatus(campaignId: string) {
-  const [pending, processing, completed, failed, recentFailures] = await Promise.all([
-    db.backgroundJob.count({ where: { type: "AUTOMATE_CONTACT", contact: { campaignId }, status: "PENDING" } }),
-    db.backgroundJob.count({ where: { type: "AUTOMATE_CONTACT", contact: { campaignId }, status: "PROCESSING" } }),
-    db.backgroundJob.count({ where: { type: "AUTOMATE_CONTACT", contact: { campaignId }, status: "COMPLETED" } }),
-    db.backgroundJob.count({ where: { type: "AUTOMATE_CONTACT", contact: { campaignId }, status: "FAILED" } }),
-    db.backgroundJob.findMany({ where: { type: "AUTOMATE_CONTACT", contact: { campaignId }, status: "FAILED" }, take: 3, orderBy: { updatedAt: "desc" }, select: { errorMessage: true, payload: true, contact: { select: { companyName: true } } } }),
-  ]);
-  return { pending, processing, completed, failed, active: pending + processing, recentFailures: recentFailures.map(item => ({ companyName: item.contact?.companyName, message: item.errorMessage, code: (item.payload as { failureCode?: string })?.failureCode })) };
+  const jobs = await db.backgroundJob.findMany({
+    where: { type: "AUTOMATE_CONTACT", contact: { campaignId } },
+    orderBy: { updatedAt: "desc" },
+    select: { contactId: true, status: true, errorMessage: true, payload: true, contact: { select: { companyName: true } } },
+  });
+  const latest = new Map<string, (typeof jobs)[number]>();
+  for (const job of jobs) if (job.contactId && !latest.has(job.contactId)) latest.set(job.contactId, job);
+  const current = [...latest.values()];
+  const pending = current.filter(job => job.status === "PENDING").length;
+  const processing = current.filter(job => job.status === "PROCESSING").length;
+  const completed = current.filter(job => job.status === "COMPLETED").length;
+  const failures = current.filter(job => job.status === "FAILED");
+  return { pending, processing, completed, failed: failures.length, active: pending + processing, recentFailures: failures.slice(0, 3).map(item => ({ companyName: item.contact?.companyName, message: item.errorMessage, code: (item.payload as { failureCode?: string })?.failureCode })) };
 }

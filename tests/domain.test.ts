@@ -53,5 +53,12 @@ describe("generation and delivery safeguards", () => {
     const failure = classifyProviderError(new Error("429 Too Many Requests: project exceeded its monthly spending cap"));
     expect(failure.code).toBe("GEMINI_SPEND_CAP");
     expect(failure.configurationBlocked).toBe(true);
+    expect(failure.retryable).toBe(false);
+  });
+  it("classifies Gemini high demand as transient and retryable", () => {
+    const failure = classifyProviderError(new Error("503 Service Unavailable: model is currently experiencing high demand"));
+    expect(failure.code).toBe("GEMINI_HIGH_DEMAND");
+    expect(failure.retryable).toBe(true);
+    expect(failure.configurationBlocked).toBe(false);
   });
 });
