@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { getOrCreateProfile } from "@/lib/profile";
 import { generateGeminiText } from "@/lib/gemini";
 import { resumeTailoringPrompt } from "@/prompts/resumeTailoringPrompt";
-import { renderResumePdf } from "@/lib/resume-renderer";
+import { compileLatexToPdf } from "@/lib/resume-renderer";
 import { resumeFileName, sanitizeCompanyForFilename } from "@/lib/utils";
 import { storeFile } from "@/lib/storage";
 import { certificationSchema, educationEntrySchema, experienceSchema, projectSchema } from "@/lib/profile-schema";
@@ -58,7 +58,8 @@ export async function generateResume(contactId: string) {
       certifications: certifications.success ? certifications.data : [],
       achievements,
     });
-    assertPdfBuffer(generatedPdf);
+    assertPdfBuffer(pdf);
+    const pdf = await compileLatexToPdf(latex);
     const key = sanitizeCompanyForFilename(contact.companyName);
     const [pdfUrl, texUrl] = await Promise.all([
       storeFile(`resumes/pdf/${fileName}`, generatedPdf, "application/pdf"),

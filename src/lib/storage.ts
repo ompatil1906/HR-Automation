@@ -4,7 +4,7 @@ import path from "node:path";
 
 export async function storeFile(key: string, data: Buffer, contentType: string) {
   if (process.env.BLOB_READ_WRITE_TOKEN) {
-    const blob = await put(key, data, { access: "public", contentType, addRandomSuffix: false });
+    const blob = await put(key, data, { access: "public", contentType, addRandomSuffix: false, allowOverwrite: true });
     return blob.url;
   }
   const safe = key.replace(/^\/+/, "");
