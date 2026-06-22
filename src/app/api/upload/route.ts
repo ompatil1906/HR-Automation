@@ -5,8 +5,11 @@ import { db } from "@/lib/db";
 import { fail, ok } from "@/lib/api";
 import { isValidEmail } from "@/lib/utils";
 import { storeFile } from "@/lib/storage";
+import { after } from "next/server";
+import { processAutomationJobs, queueCampaignAutomation } from "@/lib/automation";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
@@ -51,6 +54,8 @@ export async function POST(request: Request) {
     });
     const campaign = await db.campaign.create({ data: { name, uploadedFileUrl: fileUrl, uploadedFileName: file.name, totalRows: contacts.length, status: "READY", notes: String(form.get("notes") || ""), contacts: { create: contacts } } });
     await db.activityLog.create({ data: { action: "CAMPAIGN_IMPORTED", entityType: "Campaign", entityId: campaign.id, campaignId: campaign.id, status: "SUCCESS", message: `${contacts.length} contacts imported; ${contacts.filter((c) => !c.emailValid).length} require email review.`, userAction: true } });
-    return ok({ campaignId: campaign.id, totalRows: contacts.length }, 201);
+    const automation = await queueCampaignAutomation(campaign.id);
+    if (automation.mode === "after-response" && automation.jobIds.length) after(() => processAutomationJobs(automation.jobIds));
+    return ok({ campaignId: campaign.id, totalRows: contacts.length, automation }, 201);
   } catch (error) { return fail(error); }
 }

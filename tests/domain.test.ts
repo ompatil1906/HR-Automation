@@ -8,6 +8,8 @@ import { buildGmailRaw } from "@/lib/gmail";
 import { buildSendSchedule } from "@/lib/send-queue";
 import { emailGenerationPrompt } from "@/prompts/emailGenerationPrompt";
 import { getGmailRedirectUri } from "@/lib/gmail-oauth";
+import { isPdfBuffer } from "@/lib/pdf";
+import { deliverabilityReasons } from "@/lib/quality";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -37,5 +39,13 @@ describe("generation and delivery safeguards", () => {
     vi.stubEnv("GOOGLE_REDIRECT_URI", "http://localhost:3000/api/gmail/oauth/callback");
     vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "coldmailos.vercel.app");
     expect(getGmailRedirectUri()).toBe("https://coldmailos.vercel.app/api/gmail/oauth/callback");
+  });
+  it("rejects HTML or error pages stored as resume PDFs", () => {
+    expect(isPdfBuffer(Buffer.from("%PDF-1.7\n"))).toBe(true);
+    expect(isPdfBuffer(Buffer.from("<html>Not found</html>"))).toBe(false);
+  });
+  it("flags obvious deliverability risks before draft or send", () => {
+    expect(deliverabilityReasons("ACT NOW!!!", "Click here! This is guaranteed and 100% free!").length).toBeGreaterThan(0);
+    expect(deliverabilityReasons("Application for AI Engineer | Om Patil", "Hello, I am writing regarding Acme and a relevant engineering opportunity.")).toEqual([]);
   });
 });

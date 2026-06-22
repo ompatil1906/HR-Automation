@@ -13,12 +13,12 @@ export async function queueApprovedSends(campaignId: string, contactIds: string[
   if (process.env.QSTASH_TOKEN && (process.env.NEXTAUTH_URL || process.env.VERCEL_URL)) {
     const client = new Client({ token: process.env.QSTASH_TOKEN });
     const base = process.env.NEXTAUTH_URL || `https://${process.env.VERCEL_URL}`;
-    await Promise.all(jobs.map(({ job, index }) => client.publishJSON({ url: `${base}/api/jobs/process`, body: { jobId: job.id }, delay: index * profile.sendDelaySeconds, headers: { Authorization: `Bearer ${process.env.NEXTAUTH_SECRET}` } })));
+    await Promise.all(jobs.map(({ job, index }) => client.publishJSON({ url: `${base}/api/jobs/process`, body: { jobId: job.id }, delay: index * Math.max(30, profile.sendDelaySeconds), headers: { Authorization: `Bearer ${process.env.NEXTAUTH_SECRET}` } })));
     return { queued: jobs.length, mode: "qstash" };
   }
   const results: Array<{ id: string; status: string; error?: string }> = [];
   for (const { job, index } of jobs) {
-    if (index) await sleep(profile.sendDelaySeconds * 1000);
+    if (index) await sleep(Math.max(30, profile.sendDelaySeconds) * 1000);
     try { await processSendJob(job.id); results.push({ id: job.id, status: "sent" }); }
     catch (error) { results.push({ id: job.id, status: "failed", error: error instanceof Error ? error.message : "Unknown error" }); }
   }

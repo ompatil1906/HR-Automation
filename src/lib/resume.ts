@@ -6,6 +6,7 @@ import { compileLatexToPdf } from "@/lib/resume-renderer";
 import { resumeFileName, sanitizeCompanyForFilename } from "@/lib/utils";
 import { storeFile } from "@/lib/storage";
 import { certificationSchema, educationEntrySchema, experienceSchema, projectSchema } from "@/lib/profile-schema";
+import { assertPdfBuffer } from "@/lib/pdf";
 
 const baseLatex = String.raw`\documentclass[10pt,a4paper]{article}
 \usepackage[margin=0.65in]{geometry}\usepackage{enumitem}\usepackage[hidelinks]{hyperref}
@@ -29,6 +30,35 @@ export async function generateResume(contactId: string) {
   const resume = await db.generatedResume.create({ data: { contactId, templateId: template.id, companyName: contact.companyName, resumeType: contact.research.category, latexContent: template.currentLatex, fileName, compileStatus: "PROCESSING" } });
   try {
     const latex = await generateGeminiText(resumeTailoringPrompt({ latex: template.currentLatex, profile, research: contact.research }));
+    const roles = contact.research.possibleRoles as string[];
+    const role = roles[0] || "AI/ML & Software Engineer";
+    const skills = profile.skills as string[];
+    const experiences = experienceSchema.array().safeParse(profile.experiences);
+    const educationEntries = educationEntrySchema.array().safeParse(profile.educationEntries);
+    const projects = projectSchema.array().safeParse(profile.projects);
+    const certifications = certificationSchema.array().safeParse(profile.certifications);
+    const achievements = Array.isArray(profile.achievements) ? profile.achievements.filter((item): item is string => typeof item === "string") : [];
+    const prioritized = [...skills].sort((a, b) => contact.research!.recommendedResumeAngle.toLowerCase().includes(b.toLowerCase()) ? 1 : contact.research!.recommendedResumeAngle.toLowerCase().includes(a.toLowerCase()) ? -1 : 0);
+    const fallbackExperience = [
+      { title: "Director | Product, Strategy & Technology and Founding AI/ML Engineer — AskLumenAI", detail: profile.askLumenDescription },
+      { title: "Full-Stack Engineer Intern — ViksitHub", detail: profile.viksitHubDescription },
+      { title: "Intern — XerXez Solutions", detail: profile.xerxezDescription },
+    ];
+    const pdf = await renderResumePdf({
+      name: profile.name, email: profile.email, phone: profile.phone, linkedin: profile.linkedin, github: profile.github,
+      portfolio: profile.portfolio, location: profile.location, education: profile.education, targetRole: role, skills: prioritized,
+      summary: profile.professionalSummary || profile.experienceSummary,
+      experience: experiences.success && experiences.data.length ? experiences.data.map(item => ({
+        title: `${item.role} — ${item.company}`,
+        meta: [item.employmentType, item.location, [item.startDate, item.current ? "Present" : item.endDate].filter(Boolean).join(" – ")].filter(Boolean).join(" | "),
+        detail: [item.description, ...item.achievements, item.technologies.length ? `Technologies: ${item.technologies.join(", ")}` : ""].filter(Boolean).join(" • "),
+      })) : fallbackExperience,
+      educationEntries: educationEntries.success ? educationEntries.data : [],
+      projects: projects.success ? projects.data : [],
+      certifications: certifications.success ? certifications.data : [],
+      achievements,
+    });
+    assertPdfBuffer(pdf);
     const pdf = await compileLatexToPdf(latex);
     const key = sanitizeCompanyForFilename(contact.companyName);
     const [pdfUrl, texUrl] = await Promise.all([

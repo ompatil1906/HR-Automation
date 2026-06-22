@@ -5,6 +5,7 @@ import { fetchFile } from "@/lib/storage";
 import { validateOutreach } from "@/lib/quality";
 import { getOrCreateProfile } from "@/lib/profile";
 import { getGmailRedirectUri } from "@/lib/gmail-oauth";
+import { assertPdfBuffer } from "@/lib/pdf";
 
 export function oauthClient(redirectUri?: string) {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) throw new Error("Google OAuth client is not configured");
@@ -40,10 +41,11 @@ function encodeHeader(value: string) {
   return `=?UTF-8?B?${Buffer.from(value).toString("base64")}?=`;
 }
 
-export function buildGmailRaw(input: { to: string; from: string; subject: string; body: string; attachmentName: string; attachment: Buffer }) {
+export function buildGmailRaw(input: { to: string; from: string; fromName?: string; subject: string; body: string; attachmentName: string; attachment: Buffer }) {
   const boundary = `coldmailos_${crypto.randomUUID()}`;
+  const from = input.fromName ? `${input.fromName.replace(/[\r\n<>]/g, "")} <${input.from}>` : input.from;
   const lines = [
-    `From: ${input.from}`, `To: ${input.to}`, `Subject: ${encodeHeader(input.subject)}`, "MIME-Version: 1.0",
+    `From: ${from}`, `Reply-To: ${input.from}`, `To: ${input.to}`, `Subject: ${encodeHeader(input.subject)}`, "MIME-Version: 1.0",
     `Content-Type: multipart/mixed; boundary="${boundary}"`, "", `--${boundary}`,
     "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "",
     Buffer.from(input.body).toString("base64"), "", `--${boundary}`,
@@ -70,13 +72,16 @@ async function packageFor(contactId: string) {
   const check = await validateOutreach(contactId);
   if (!check.pass || !check.email || !check.resume?.pdfFileUrl) throw new Error(`Quality check failed: ${check.reasons.join(" ")}`);
   const profile = await getOrCreateProfile();
-  return { check, profile, attachment: await fetchFile(check.resume.pdfFileUrl) };
+  const attachment = await fetchFile(check.resume.pdfFileUrl);
+  assertPdfBuffer(attachment);
+  return { check, profile, attachment };
 }
 
 export async function createGmailDraft(contactId: string) {
   const { check, profile, attachment } = await packageFor(contactId);
   const { gmail, accountEmail } = await gmailClient();
-  const raw = buildGmailRaw({ to: check.contact.hrEmail, from: accountEmail || profile.email, subject: check.email!.subject, body: check.email!.body, attachmentName: check.resume!.fileName, attachment });
+  if (accountEmail && accountEmail.toLowerCase() !== profile.email.toLowerCase()) throw new Error(`Connected Gmail (${accountEmail}) does not match the profile sender (${profile.email})`);
+  const raw = buildGmailRaw({ to: check.contact.hrEmail, from: accountEmail || profile.email, fromName: profile.name, subject: check.email!.subject, body: check.email!.body, attachmentName: check.resume!.fileName, attachment });
   const result = await gmail.users.drafts.create({ userId: "me", requestBody: { message: { raw } } });
   const labelIds = await ensureLabels(gmail, ["Cold Outreach", "Drafted"]);
   if (result.data.message?.id && labelIds.length) await gmail.users.messages.modify({ userId: "me", id: result.data.message.id, requestBody: { addLabelIds: labelIds } });
@@ -93,7 +98,8 @@ export async function sendGmailEmail(contactId: string) {
   if (sentToday >= profile.dailySendLimit) throw new Error(`Daily send limit (${profile.dailySendLimit}) reached`);
   const { check, attachment } = await packageFor(contactId);
   const { gmail, accountEmail } = await gmailClient();
-  const raw = buildGmailRaw({ to: check.contact.hrEmail, from: accountEmail || profile.email, subject: check.email!.subject, body: check.email!.body, attachmentName: check.resume!.fileName, attachment });
+  if (accountEmail && accountEmail.toLowerCase() !== profile.email.toLowerCase()) throw new Error(`Connected Gmail (${accountEmail}) does not match the profile sender (${profile.email})`);
+  const raw = buildGmailRaw({ to: check.contact.hrEmail, from: accountEmail || profile.email, fromName: profile.name, subject: check.email!.subject, body: check.email!.body, attachmentName: check.resume!.fileName, attachment });
   const result = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
   const labelIds = await ensureLabels(gmail, ["Cold Outreach", "Sent"]);
   if (result.data.id && labelIds.length) await gmail.users.messages.modify({ userId: "me", id: result.data.id, requestBody: { addLabelIds: labelIds } });
