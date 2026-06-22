@@ -4,17 +4,19 @@ import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { fetchFile } from "@/lib/storage";
 import { validateOutreach } from "@/lib/quality";
 import { getOrCreateProfile } from "@/lib/profile";
+import { getGmailRedirectUri } from "@/lib/gmail-oauth";
 
-export function oauthClient() {
-  return new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_REDIRECT_URI);
+export function oauthClient(redirectUri?: string) {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) throw new Error("Google OAuth client is not configured");
+  return new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, redirectUri || getGmailRedirectUri());
 }
 
-export function gmailAuthUrl(state: string) {
-  return oauthClient().generateAuthUrl({ access_type: "offline", prompt: "consent", state, scope: ["https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.labels", "https://www.googleapis.com/auth/userinfo.email"] });
+export function gmailAuthUrl(state: string, redirectUri: string) {
+  return oauthClient(redirectUri).generateAuthUrl({ access_type: "offline", prompt: "consent", state, scope: ["https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.labels", "https://www.googleapis.com/auth/userinfo.email"] });
 }
 
-export async function saveGmailTokens(code: string) {
-  const client = oauthClient();
+export async function saveGmailTokens(code: string, redirectUri: string) {
+  const client = oauthClient(redirectUri);
   const { tokens } = await client.getToken(code);
   client.setCredentials(tokens);
   const oauth = google.oauth2({ version: "v2", auth: client });
@@ -31,7 +33,7 @@ async function gmailClient() {
     const current = JSON.parse(decryptSecret(stored.encryptedTokens));
     await db.oAuthCredential.update({ where: { id: stored.id }, data: { encryptedTokens: encryptSecret(JSON.stringify({ ...current, ...tokens })) } });
   });
-  return google.gmail({ version: "v1", auth: client });
+  return { gmail: google.gmail({ version: "v1", auth: client }), accountEmail: stored.accountEmail };
 }
 
 function encodeHeader(value: string) {
@@ -73,8 +75,8 @@ async function packageFor(contactId: string) {
 
 export async function createGmailDraft(contactId: string) {
   const { check, profile, attachment } = await packageFor(contactId);
-  const gmail = await gmailClient();
-  const raw = buildGmailRaw({ to: check.contact.hrEmail, from: profile.email, subject: check.email!.subject, body: check.email!.body, attachmentName: check.resume!.fileName, attachment });
+  const { gmail, accountEmail } = await gmailClient();
+  const raw = buildGmailRaw({ to: check.contact.hrEmail, from: accountEmail || profile.email, subject: check.email!.subject, body: check.email!.body, attachmentName: check.resume!.fileName, attachment });
   const result = await gmail.users.drafts.create({ userId: "me", requestBody: { message: { raw } } });
   const labelIds = await ensureLabels(gmail, ["Cold Outreach", "Drafted"]);
   if (result.data.message?.id && labelIds.length) await gmail.users.messages.modify({ userId: "me", id: result.data.message.id, requestBody: { addLabelIds: labelIds } });
@@ -90,8 +92,8 @@ export async function sendGmailEmail(contactId: string) {
   const sentToday = await db.sentEmail.count({ where: { status: "SENT", sentAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } } });
   if (sentToday >= profile.dailySendLimit) throw new Error(`Daily send limit (${profile.dailySendLimit}) reached`);
   const { check, attachment } = await packageFor(contactId);
-  const gmail = await gmailClient();
-  const raw = buildGmailRaw({ to: check.contact.hrEmail, from: profile.email, subject: check.email!.subject, body: check.email!.body, attachmentName: check.resume!.fileName, attachment });
+  const { gmail, accountEmail } = await gmailClient();
+  const raw = buildGmailRaw({ to: check.contact.hrEmail, from: accountEmail || profile.email, subject: check.email!.subject, body: check.email!.body, attachmentName: check.resume!.fileName, attachment });
   const result = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
   const labelIds = await ensureLabels(gmail, ["Cold Outreach", "Sent"]);
   if (result.data.id && labelIds.length) await gmail.users.messages.modify({ userId: "me", id: result.data.id, requestBody: { addLabelIds: labelIds } });

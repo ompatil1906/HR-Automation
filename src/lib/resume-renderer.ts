@@ -2,8 +2,12 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 type ResumeData = {
   name: string; email: string; phone?: string | null; linkedin?: string | null; github?: string | null;
-  location?: string | null; education?: string | null; skills: string[]; targetRole: string;
-  summary: string; experience: Array<{ title: string; detail: string }>;
+  portfolio?: string | null; location?: string | null; education?: string | null; skills: string[]; targetRole: string;
+  summary: string; experience: Array<{ title: string; meta?: string; detail: string }>;
+  educationEntries?: Array<{ institution: string; degree: string; field: string; location: string; startDate: string; endDate: string; grade: string; highlights: string[] }>;
+  projects?: Array<{ name: string; role: string; url: string; description: string; highlights: string[]; technologies: string[] }>;
+  certifications?: Array<{ name: string; issuer: string; issuedDate: string; credentialUrl: string }>;
+  achievements?: string[];
 };
 
 function wrap(text: string, max = 92) {
@@ -37,14 +41,31 @@ export async function renderResumePdf(data: ResumeData) {
 
   line(data.name, 22, true);
   line(data.targetRole, 10.5, true, rgb(0.15, 0.4, 0.68));
-  paragraph([data.email, data.phone, data.location, data.linkedin, data.github].filter(Boolean).join("  |  "), 8.3);
+  paragraph([data.email, data.phone, data.location, data.linkedin, data.github, data.portfolio].filter(Boolean).join("  |  "), 8.3);
   heading("Professional Summary");
   paragraph(data.summary);
   heading("Technical Skills");
   paragraph(data.skills.join(" • "));
   heading("Experience");
-  for (const item of data.experience) { line(item.title, 9.7, true); paragraph(item.detail, 9, 8); y += 1; }
+  for (const item of data.experience) { line(item.title, 9.7, true); if (item.meta) line(item.meta, 8.2, false, muted); paragraph(item.detail, 9, 8); y += 1; }
+  if (data.projects?.length) {
+    heading("Projects");
+    for (const item of data.projects) {
+      line([item.name, item.role].filter(Boolean).join(" — "), 9.7, true);
+      paragraph([item.description, ...item.highlights, item.technologies.length ? `Technologies: ${item.technologies.join(", ")}` : ""].filter(Boolean).join(" • "), 9, 8);
+    }
+  }
   heading("Education");
-  paragraph(data.education || "B.Tech Artificial Intelligence & Data Science");
+  if (data.educationEntries?.length) {
+    for (const item of data.educationEntries) {
+      line([item.degree, item.field].filter(Boolean).join(" — "), 9.7, true);
+      paragraph([item.institution, item.location, [item.startDate, item.endDate].filter(Boolean).join(" – "), item.grade, ...item.highlights].filter(Boolean).join(" • "), 9, 8);
+    }
+  } else paragraph(data.education || "Education not provided");
+  if (data.certifications?.length) {
+    heading("Certifications");
+    for (const item of data.certifications) paragraph([item.name, item.issuer, item.issuedDate].filter(Boolean).join(" — "));
+  }
+  if (data.achievements?.length) { heading("Achievements"); for (const item of data.achievements) paragraph(`• ${item}`); }
   return Buffer.from(await pdf.save());
 }
