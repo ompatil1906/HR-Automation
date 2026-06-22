@@ -44,7 +44,7 @@ export async function generateResume(contactId: string) {
       { title: "Full-Stack Engineer Intern — ViksitHub", detail: profile.viksitHubDescription },
       { title: "Intern — XerXez Solutions", detail: profile.xerxezDescription },
     ];
-    const pdf = await renderResumePdf({
+    const generatedPdf = await renderResumePdf({
       name: profile.name, email: profile.email, phone: profile.phone, linkedin: profile.linkedin, github: profile.github,
       portfolio: profile.portfolio, location: profile.location, education: profile.education, targetRole: role, skills: prioritized,
       summary: profile.professionalSummary || profile.experienceSummary,
@@ -62,7 +62,7 @@ export async function generateResume(contactId: string) {
     const pdf = await compileLatexToPdf(latex);
     const key = sanitizeCompanyForFilename(contact.companyName);
     const [pdfUrl, texUrl] = await Promise.all([
-      storeFile(`resumes/pdf/${fileName}`, pdf, "application/pdf"),
+      storeFile(`resumes/pdf/${fileName}`, generatedPdf, "application/pdf"),
       storeFile(`resumes/tex/Om_Patil_Resume_${key}.tex`, Buffer.from(latex), "application/x-tex"),
     ]);
     const updated = await db.generatedResume.update({ where: { id: resume.id }, data: { latexContent: latex, pdfFileUrl: pdfUrl, texFileUrl: texUrl, compileStatus: "COMPLETED" } });
