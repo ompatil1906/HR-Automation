@@ -71,8 +71,10 @@ Open [http://localhost:3000](http://localhost:3000). The default Om profile is c
 
 See [.env.example](./.env.example). Important values:
 
-- `DATABASE_URL`: pooled PostgreSQL connection URL
+- `DATABASE_URL`: Neon pooled PostgreSQL connection URL (`-pooler` hostname) for Vercel functions
+- `DATABASE_URL_UNPOOLED`: Neon direct connection URL for Prisma migrations
 - `TAVILY_API_KEY`, `GEMINI_API_KEY`: optional environment defaults; keys entered in Settings are AES-256-GCM encrypted in the database
+- `GEMINI_MODEL`: optional server-side model override; defaults to the stable `gemini-2.5-flash`
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`: Gmail OAuth client
 - `NEXTAUTH_SECRET`: signs owner sessions and authenticates internal job callbacks
 - `ENCRYPTION_KEY`: a long independent secret used for API keys and OAuth tokens
@@ -170,6 +172,8 @@ Tests cover spreadsheet mapping, email validation, company normalization, Tavily
 4. Add QStash and its `QSTASH_TOKEN`.
 5. Run `npx prisma migrate deploy` against production once.
 6. Deploy. The build command is `npm run build`.
+
+Vercel runs `npm run vercel-build`, which applies committed Prisma migrations before building. The Neon-managed Vercel integration injects `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct). Apply the integration to Production and enable isolated Preview branches plus automatic obsolete-branch cleanup, then redeploy. The owner-only `/api/health/database` endpoint verifies connectivity and applied migrations without exposing credentials.
 
 The repository includes `vercel.json` declaring the Next.js framework and `.next` output. In **Vercel → Project Settings → Build & Development Settings**, do not override the Output Directory with `public`; leave the repository setting in control or set it to `.next`.
 

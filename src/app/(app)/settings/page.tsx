@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Button, Card, PageHeader, Spinner } from "@/components/ui";
+import { Button, Card, ErrorState, PageHeader, Spinner } from "@/components/ui";
 import { CheckCircle2, KeyRound, Mail, ShieldAlert } from "lucide-react";
+import { fetchJson } from "@/lib/client-api";
 
 type Form = Record<string, any>;
 const profileFields = [["Name","name"],["Email","email"],["Phone","phone"],["Location","location"],["LinkedIn","linkedin"],["GitHub","github"],["Education","education"]];
@@ -12,7 +13,9 @@ export default function SettingsPage() {
   const [integrations, setIntegrations] = useState<any>();
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
-  useEffect(() => { fetch("/api/settings").then(r => r.json()).then(d => { setForm({ ...d.profile, targetRoles: (d.profile.targetRoles || []).join(", "), skills: (d.profile.skills || []).join(", "), tavilyApiKey: "", geminiApiKey: "" }); setIntegrations(d.integrations); }); }, []);
+  const [error, setError] = useState("");
+  useEffect(() => { fetchJson<any>("/api/settings").then(d => { setForm({ ...d.profile, targetRoles: (d.profile.targetRoles || []).join(", "), skills: (d.profile.skills || []).join(", "), tavilyApiKey: "", geminiApiKey: "" }); setIntegrations(d.integrations); }).catch(e => setError(e.message)); }, []);
+  if (error) return <ErrorState message={error} />;
   if (!form) return <div className="grid h-80 place-items-center"><Spinner /></div>;
   const current = form;
   const set = (key: string, value: any) => setForm(previous => ({ ...previous, [key]: value }));
