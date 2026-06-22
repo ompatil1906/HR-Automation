@@ -102,14 +102,15 @@ Gemini is also used for conservative LaTeX tailoring and concise email generatio
 1. Create a Google Cloud project and enable the Gmail API.
 2. Configure the OAuth consent screen. For a personal app in testing, add Om's Gmail account as a test user.
 3. Create a Web OAuth client.
-4. Add the exact redirect URI from `GOOGLE_REDIRECT_URI`, for example:
+4. Add the exact callback shown in **Settings → Gmail → Authorized callback URL** to the OAuth client's **Authorized redirect URIs**. For example:
 
    ```text
    http://localhost:3000/api/gmail/oauth/callback
    https://your-domain.vercel.app/api/gmail/oauth/callback
    ```
 
-5. Add the client ID and secret to the environment, deploy, then use **Connect Gmail** on `/settings`.
+5. In Vercel Production, set `GOOGLE_REDIRECT_URI=https://coldmailos.vercel.app/api/gmail/oauth/callback` (or your canonical custom domain), add the client ID and secret, and redeploy.
+6. Use **Connect Gmail** on `/settings`. The app rejects a `localhost` callback in production and displays the effective callback URI for diagnosis.
 
 OAuth tokens are encrypted before database storage. The app requests Gmail compose and label scopes, not full mailbox access.
 

@@ -52,10 +52,18 @@ model UserProfile {
   phone                 String?
   linkedin              String?
   github                String?
+  portfolio             String?
   location              String?
   education             String?
+  headline              String   @default("")
+  professionalSummary   String   @default("") @db.Text
   targetRoles           Json
   skills                Json
+  experiences           Json     @default("[]")
+  educationEntries      Json     @default("[]")
+  projects              Json     @default("[]")
+  certifications        Json     @default("[]")
+  achievements          Json     @default("[]")
   experienceSummary     String   @db.Text
   askLumenDescription   String   @db.Text
   viksitHubDescription  String   @db.Text

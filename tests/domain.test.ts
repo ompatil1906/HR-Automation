@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { detectColumns } from "@/lib/column-detection";
 import { isValidEmail, matchesResumeCompany, normalizeCompanyName, resumeFileName, sanitizeCompanyForFilename } from "@/lib/utils";
 import { hiringLikelihood, priorityScore } from "@/lib/scoring";
@@ -7,6 +7,9 @@ import { dedupeTavilyResults } from "@/lib/tavily";
 import { buildGmailRaw } from "@/lib/gmail";
 import { buildSendSchedule } from "@/lib/send-queue";
 import { emailGenerationPrompt } from "@/prompts/emailGenerationPrompt";
+import { getGmailRedirectUri } from "@/lib/gmail-oauth";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("spreadsheet column detection", () => {
   it("maps common HR spreadsheet headings", () => expect(detectColumns(["Recruiter Name", "Work Email", "Organisation Name", "Company LinkedIn", "Remarks"])).toEqual({ hrName: "Recruiter Name", hrEmail: "Work Email", companyName: "Organisation Name", linkedinUrl: "Company LinkedIn", notes: "Remarks" }));
@@ -29,4 +32,10 @@ describe("generation and delivery safeguards", () => {
   it("email prompt forbids invented facts and constrains length", () => { const prompt=emailGenerationPrompt({profile:{name:"Om"},contact:{companyName:"Acme"},research:{confidenceScore:80}}); expect(prompt).toContain("Do not invent facts"); expect(prompt).toContain("under 220 words"); });
   it("builds an individual MIME payload with the matched attachment", () => { const raw=buildGmailRaw({to:"hr@acme.com",from:"om@example.com",subject:"Application",body:"Hello Acme",attachmentName:"Om_Patil_Resume_Acme.pdf",attachment:Buffer.from("pdf")}); const decoded=Buffer.from(raw,"base64url").toString(); expect(decoded).toContain("To: hr@acme.com"); expect(decoded).toContain("filename=\"Om_Patil_Resume_Acme.pdf\""); expect(decoded).not.toContain("Bcc:"); });
   it("schedules one contact per delayed job", () => expect(buildSendSchedule(["a","b","c"],30)).toEqual([{contactId:"a",delaySeconds:0},{contactId:"b",delaySeconds:30},{contactId:"c",delaySeconds:60}]));
+  it("never uses a localhost Gmail callback in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("GOOGLE_REDIRECT_URI", "http://localhost:3000/api/gmail/oauth/callback");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "coldmailos.vercel.app");
+    expect(getGmailRedirectUri()).toBe("https://coldmailos.vercel.app/api/gmail/oauth/callback");
+  });
 });
