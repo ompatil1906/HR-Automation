@@ -69,3 +69,22 @@ export async function renderResumePdf(data: ResumeData) {
   if (data.achievements?.length) { heading("Achievements"); for (const item of data.achievements) paragraph(`• ${item}`); }
   return Buffer.from(await pdf.save());
 }
+
+export async function compileLatexToPdf(latex: string): Promise<Buffer> {
+  const formData = new FormData();
+  formData.append("filecontents", latex);
+  formData.append("filename", "resume.tex");
+  formData.append("engine", "pdflatex");
+  formData.append("return", "pdf");
+
+  const res = await fetch("https://texlive.net/cgi-bin/latexcgi", {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw new Error(`LaTeX compilation failed: ${res.status} ${res.statusText}`);
+  }
+
+  return Buffer.from(await res.arrayBuffer());
+}
