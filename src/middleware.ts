@@ -4,6 +4,8 @@ import { verifySession } from "@/lib/auth";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (pathname === "/" || pathname === "/login" || pathname.startsWith("/api/auth/") || pathname.startsWith("/api/jobs/process") || pathname.startsWith("/_next") || pathname === "/favicon.ico") return NextResponse.next();
+  const adminBearer = request.headers.get("authorization");
+  if (pathname.startsWith("/api/admin/cleanup") && [process.env.NEXTAUTH_SECRET, process.env.COLDMAILOS_CLEANUP_TOKEN].some((token) => token && adminBearer === `Bearer ${token}`)) return NextResponse.next();
   const token = request.cookies.get("coldmailos_session")?.value;
   if (token) { try { await verifySession(token); return NextResponse.next(); } catch {} }
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
