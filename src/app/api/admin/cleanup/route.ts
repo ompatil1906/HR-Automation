@@ -24,11 +24,57 @@ function recoveredStatus(contact: { researchId: string | null; generatedEmails: 
 
 const providerFailureCodes = new Set(["GEMINI_SPEND_CAP", "GEMINI_RATE_LIMIT", "GEMINI_HIGH_DEMAND", "PROVIDER_ERROR"]);
 
+type CleanupClient = Pick<typeof db, "activityLog" | "backgroundJob" | "campaign" | "companyResearch" | "contact" | "generatedEmail" | "generatedResume" | "gmailDraft" | "sentEmail">;
+
+async function clearCampaignData(tx: CleanupClient) {
+  const before = {
+    campaigns: await tx.campaign.count(),
+    contacts: await tx.contact.count(),
+    companyResearch: await tx.companyResearch.count(),
+    generatedResumes: await tx.generatedResume.count(),
+    generatedEmails: await tx.generatedEmail.count(),
+    gmailDrafts: await tx.gmailDraft.count(),
+    sentEmails: await tx.sentEmail.count(),
+    backgroundJobs: await tx.backgroundJob.count(),
+    activityLogs: await tx.activityLog.count(),
+  };
+
+  const deletedActivityLogs = await tx.activityLog.deleteMany();
+  const deletedGmailDrafts = await tx.gmailDraft.deleteMany();
+  const deletedSentEmails = await tx.sentEmail.deleteMany();
+  const deletedGeneratedEmails = await tx.generatedEmail.deleteMany();
+  const deletedGeneratedResumes = await tx.generatedResume.deleteMany();
+  const deletedBackgroundJobs = await tx.backgroundJob.deleteMany();
+  const deletedContacts = await tx.contact.deleteMany();
+  const deletedCampaigns = await tx.campaign.deleteMany();
+  const deletedCompanyResearch = await tx.companyResearch.deleteMany();
+
+  return {
+    scope: "campaigns",
+    before,
+    deleted: {
+      campaigns: deletedCampaigns.count,
+      contacts: deletedContacts.count,
+      companyResearch: deletedCompanyResearch.count,
+      generatedResumes: deletedGeneratedResumes.count,
+      generatedEmails: deletedGeneratedEmails.count,
+      gmailDrafts: deletedGmailDrafts.count,
+      sentEmails: deletedSentEmails.count,
+      backgroundJobs: deletedBackgroundJobs.count,
+      activityLogs: deletedActivityLogs.count,
+    },
+    preserved: ["UserProfile", "ApiKey", "OAuthCredential", "ResumeTemplate"],
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin(request);
     const body = await request.json().catch(() => ({}));
+    const scope = body.scope === "campaigns" ? "campaigns" : "activity";
     const resetAutomation = body.resetAutomation !== false;
+
+    if (scope === "campaigns") return ok({ success: true, ...(await clearCampaignData(db)) });
 
     const result = await db.$transaction(async (tx) => {
       const before = {
