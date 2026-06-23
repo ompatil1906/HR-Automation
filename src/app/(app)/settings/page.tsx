@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const [templates, setTemplates] = useState<ResumeTemplate[]>([]);
   const [selected, setSelected] = useState<ResumeTemplate>();
   const [saving, setSaving] = useState(false);
+  const [cleaningCampaigns, setCleaningCampaigns] = useState(false);
+  const [cleanupText, setCleanupText] = useState("");
   const [notice, setNotice] = useState<Notice>();
   const [error, setError] = useState("");
 
@@ -144,6 +146,31 @@ export default function SettingsPage() {
     } catch (cause) {
       setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Resume upload failed" });
     } finally { setSaving(false); }
+  }
+
+  async function clearCampaignData() {
+    if (cleanupText !== "DELETE CAMPAIGNS") {
+      setNotice({ tone: "error", text: "Type DELETE CAMPAIGNS exactly before clearing campaign data." });
+      return;
+    }
+    const confirmed = window.confirm("This will permanently delete all campaigns, contacts, research, generated resumes/emails, Gmail draft records, sent-email records, automation jobs, and activity logs from the database. Profile, API keys, Gmail connection, and resume templates will stay. Continue?");
+    if (!confirmed) return;
+
+    setCleaningCampaigns(true); setNotice(undefined);
+    try {
+      const result = await fetchJson<any>("/api/admin/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "campaigns" }),
+      });
+      setCleanupText("");
+      setNotice({ tone: "success", text: `Campaign data cleared: ${result.deleted?.campaigns || 0} campaigns, ${result.deleted?.contacts || 0} contacts, ${result.deleted?.generatedResumes || 0} resumes, ${result.deleted?.generatedEmails || 0} emails, and ${result.deleted?.backgroundJobs || 0} automation jobs deleted.` });
+      await load();
+    } catch (cause) {
+      setNotice({ tone: "error", text: cause instanceof Error ? cause.message : "Campaign cleanup failed" });
+    } finally {
+      setCleaningCampaigns(false);
+    }
   }
 
   const gmailReady = integrations?.gmail?.clientReady && integrations?.gmail?.callbackReady;
@@ -256,6 +283,24 @@ export default function SettingsPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b p-6"><div><h2 className="flex items-center gap-2 text-lg font-bold"><FileCode2 size={20} /> LaTeX resume source</h2><p className="mt-1 text-sm text-gray-500">The uploaded original stays immutable; edits apply only to its working copy.</p></div>{templates.length > 0 && <select className="input min-w-64" value={selected?.id || ""} onChange={event => { const template = templates.find(item => item.id === event.target.value); setSelected(template ? { ...template } : undefined); }}>{templates.map(template => <option key={template.id} value={template.id}>{template.name}{template.isDefault ? " — Default" : ""}</option>)}</select>}</div>
         {selected ? <div className="p-6"><div className="grid gap-4 md:grid-cols-[1fr_220px]"><Field label="Template name" value={selected.name} onChange={value => setSelected({ ...selected, name: value })} /><div><label className="label">Resume type</label><select className="input" value={selected.type} onChange={event => setSelected({ ...selected, type: event.target.value })}>{resumeTypes.map(type => <option key={type}>{type}</option>)}</select></div></div><div className="mt-4"><label className="label">LaTeX source code</label><textarea spellCheck={false} className="input min-h-[620px] resize-y bg-[#101828] font-mono text-xs leading-5 text-gray-100" value={selected.currentLatex} onChange={event => setSelected({ ...selected, currentLatex: event.target.value })} /></div><label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.isDefault} onChange={event => setSelected({ ...selected, isDefault: event.target.checked })} /> Use as default base resume</label></div> : <div className="p-6 text-sm text-gray-500">No LaTeX resume has been added yet. Upload the base source below.</div>}
         <form onSubmit={uploadResume} className="grid gap-4 border-t bg-gray-50 p-6 md:grid-cols-2 xl:grid-cols-[1fr_180px_1fr_1fr_auto] xl:items-end"><div><label className="label">New template name</label><input name="name" className="input" required placeholder="Om — Master Resume" /></div><div><label className="label">Type</label><select name="type" className="input">{resumeTypes.map(type => <option key={type}>{type}</option>)}</select></div><div><label className="label">LaTeX file (.tex)</label><input name="latexFile" type="file" required accept=".tex,text/plain" className="input" /></div><div><label className="label">Existing PDF (optional)</label><input name="pdfFile" type="file" accept=".pdf" className="input" /></div><div className="space-y-2"><label className="flex items-center gap-2 whitespace-nowrap text-xs"><input name="isDefault" type="checkbox" /> Set default</label><Button className="w-full" disabled={saving}><FilePlus2 size={16} /> Add resume</Button></div></form>
+      </Card>
+
+      <Card className="overflow-hidden border-red-100">
+        <div className="border-b border-red-100 bg-red-50/70 p-6">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-red-900"><ShieldAlert size={20} /> Danger zone</h2>
+          <p className="mt-1 text-sm text-red-700">Production maintenance actions. These are permanent and should only be used before a fresh upload.</p>
+        </div>
+        <div className="grid gap-5 p-6 lg:grid-cols-[1fr_280px] lg:items-end">
+          <div>
+            <h3 className="font-semibold">Clear all campaign data</h3>
+            <p className="mt-2 text-sm leading-6 text-gray-600">Deletes campaigns, contacts, company research, generated resumes/emails, Gmail draft records, sent-email records, automation jobs, and activity logs. Keeps profile/settings, API keys, Gmail OAuth tokens, and resume templates.</p>
+            <label className="label mt-4">Type DELETE CAMPAIGNS to enable</label>
+            <input className="input max-w-md font-mono" value={cleanupText} onChange={event => setCleanupText(event.target.value)} placeholder="DELETE CAMPAIGNS" />
+          </div>
+          <Button type="button" variant="danger" className="w-full justify-center" disabled={cleaningCampaigns || cleanupText !== "DELETE CAMPAIGNS"} onClick={clearCampaignData}>
+            {cleaningCampaigns ? <Spinner /> : <Trash2 size={16} />} Clear campaign data
+          </Button>
+        </div>
       </Card>
     </div>
   </>;
