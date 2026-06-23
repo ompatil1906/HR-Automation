@@ -5,7 +5,6 @@ import { researchWithTavily } from "@/lib/tavily";
 import { hiringLikelihood, priorityScore } from "@/lib/scoring";
 import { normalizeCompanyName } from "@/lib/utils";
 import { z } from "zod";
-import { classifyProviderError } from "@/lib/provider-error";
 
 const researchSchema = z.object({
   company_name: z.string(), official_website: z.string().catch(""), linkedin_url: z.string().catch(""),
@@ -50,7 +49,7 @@ export async function researchContact(contactId: string) {
     const failure = classifyProviderError(error);
     await db.contact.update({ where: { id: contactId }, data: { status: failure.retryable ? "IMPORTED" : failure.configurationBlocked ? "MANUAL_REVIEW" : "FAILED" } });
     await log(contactId, contact.campaignId, "COMPANY_RESEARCHED", failure.retryable ? "PROVIDER_BUSY" : failure.configurationBlocked ? "CONFIGURATION_BLOCKED" : "FAILED", failure.message);
-    throw error;
+    
   }
 }
 

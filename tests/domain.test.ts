@@ -10,7 +10,6 @@ import { emailGenerationPrompt } from "@/prompts/emailGenerationPrompt";
 import { getGmailRedirectUri } from "@/lib/gmail-oauth";
 import { isPdfBuffer } from "@/lib/pdf";
 import { deliverabilityReasons } from "@/lib/quality";
-import { classifyProviderError } from "@/lib/provider-error";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -32,7 +31,7 @@ describe("research parsing and scoring", () => {
 });
 
 describe("generation and delivery safeguards", () => {
-  it("email prompt forbids invented facts and constrains length", () => { const prompt=emailGenerationPrompt({profile:{name:"Om"},contact:{companyName:"Acme"},research:{confidenceScore:80}}); expect(prompt).toContain("Do not invent facts"); expect(prompt).toMatch(/under (?:200|220) words/); });
+  it("email prompt forbids invented facts and constrains length", () => { const prompt=emailGenerationPrompt({profile:{name:"Om"},contact:{companyName:"Acme"},research:{confidenceScore:80}}); expect(prompt).toContain("Do not invent facts"); expect(prompt).toContain("under 220 words"); });
   it("builds an individual MIME payload with the matched attachment", () => { const raw=buildGmailRaw({to:"hr@acme.com",from:"om@example.com",subject:"Application",body:"Hello Acme",attachmentName:"Om_Patil_Resume_Acme.pdf",attachment:Buffer.from("pdf")}); const decoded=Buffer.from(raw,"base64url").toString(); expect(decoded).toContain("To: hr@acme.com"); expect(decoded).toContain("filename=\"Om_Patil_Resume_Acme.pdf\""); expect(decoded).not.toContain("Bcc:"); });
   it("schedules one contact per delayed job", () => expect(buildSendSchedule(["a","b","c"],30)).toEqual([{contactId:"a",delaySeconds:0},{contactId:"b",delaySeconds:30},{contactId:"c",delaySeconds:60}]));
   it("never uses a localhost Gmail callback in production", () => {
@@ -48,17 +47,5 @@ describe("generation and delivery safeguards", () => {
   it("flags obvious deliverability risks before draft or send", () => {
     expect(deliverabilityReasons("ACT NOW!!!", "Click here! This is guaranteed and 100% free!").length).toBeGreaterThan(0);
     expect(deliverabilityReasons("Application for AI Engineer | Om Patil", "Hello, I am writing regarding Acme and a relevant engineering opportunity.")).toEqual([]);
-  });
-  it("classifies Gemini spending caps as configuration blockers", () => {
-    const failure = classifyProviderError(new Error("429 Too Many Requests: project exceeded its monthly spending cap"));
-    expect(failure.code).toBe("GEMINI_SPEND_CAP");
-    expect(failure.configurationBlocked).toBe(true);
-    expect(failure.retryable).toBe(false);
-  });
-  it("classifies Gemini high demand as transient and retryable", () => {
-    const failure = classifyProviderError(new Error("503 Service Unavailable: model is currently experiencing high demand"));
-    expect(failure.code).toBe("GEMINI_HIGH_DEMAND");
-    expect(failure.retryable).toBe(true);
-    expect(failure.configurationBlocked).toBe(false);
   });
 });

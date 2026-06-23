@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { researchContact } from "@/lib/research";
 import { generateResume } from "@/lib/resume";
 import { generateEmail } from "@/lib/email";
-import { classifyProviderError } from "@/lib/provider-error";
 
 function productionBaseUrl() {
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
@@ -83,8 +82,7 @@ export async function processAutomationJob(jobId: string) {
 
 async function finishCampaignIfIdle(campaignId: string) {
   const pending = await db.backgroundJob.count({ where: { type: "AUTOMATE_CONTACT", contact: { campaignId }, status: { in: ["PENDING", "PROCESSING"] } } });
-  const campaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { status: true } });
-  if (!pending && campaign?.status !== "PAUSED") await db.campaign.update({ where: { id: campaignId }, data: { status: "READY" } });
+  if (!pending) await db.campaign.update({ where: { id: campaignId }, data: { status: "READY" } });
 }
 
 export async function processAutomationJobs(jobIds: string[]) {
