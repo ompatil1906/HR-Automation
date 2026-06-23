@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { researchContact } from "@/lib/research";
 import { generateResume } from "@/lib/resume";
 import { generateEmail } from "@/lib/email";
+import { classifyProviderError } from "@/lib/provider-error";
 
 function productionBaseUrl() {
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;

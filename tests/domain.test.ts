@@ -10,6 +10,7 @@ import { emailGenerationPrompt } from "@/prompts/emailGenerationPrompt";
 import { getGmailRedirectUri } from "@/lib/gmail-oauth";
 import { isPdfBuffer } from "@/lib/pdf";
 import { deliverabilityReasons } from "@/lib/quality";
+import { classifyProviderError } from "@/lib/provider-error";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -47,5 +48,17 @@ describe("generation and delivery safeguards", () => {
   it("flags obvious deliverability risks before draft or send", () => {
     expect(deliverabilityReasons("ACT NOW!!!", "Click here! This is guaranteed and 100% free!").length).toBeGreaterThan(0);
     expect(deliverabilityReasons("Application for AI Engineer | Om Patil", "Hello, I am writing regarding Acme and a relevant engineering opportunity.")).toEqual([]);
+  });
+  it("classifies Gemini spending caps as configuration blockers", () => {
+    const failure = classifyProviderError(new Error("429 Too Many Requests: project exceeded its monthly spending cap"));
+    expect(failure.code).toBe("GEMINI_SPEND_CAP");
+    expect(failure.configurationBlocked).toBe(true);
+    expect(failure.retryable).toBe(false);
+  });
+  it("classifies Gemini high demand as transient and retryable", () => {
+    const failure = classifyProviderError(new Error("503 Service Unavailable: model is currently experiencing high demand"));
+    expect(failure.code).toBe("GEMINI_HIGH_DEMAND");
+    expect(failure.retryable).toBe(true);
+    expect(failure.configurationBlocked).toBe(false);
   });
 });

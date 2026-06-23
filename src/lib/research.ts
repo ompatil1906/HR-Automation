@@ -5,6 +5,7 @@ import { researchWithTavily } from "@/lib/tavily";
 import { hiringLikelihood, priorityScore } from "@/lib/scoring";
 import { normalizeCompanyName } from "@/lib/utils";
 import { z } from "zod";
+import { classifyProviderError } from "@/lib/provider-error";
 
 const researchSchema = z.object({
   company_name: z.string(), official_website: z.string().catch(""), linkedin_url: z.string().catch(""),
